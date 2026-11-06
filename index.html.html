@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="kk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AHSD — 3D макет</title>
+<style>
+:root{--bg:#0a1a1f;--panel:rgba(10,32,40,.82);--line:#2c7f86;--txt:#e6f7f5;--mut:#9cc9c8;--gold:#f1c14f;--acc:#35e0d0;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+:root:not([data-theme="light"]){color-scheme:dark}
+:root[data-theme="dark"]{--bg:#0a1a1f}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0a1a1f;--panel:rgba(10,32,40,.82)}}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font-family:"Segoe UI",Roboto,"DejaVu Sans",Arial,sans-serif;-webkit-tap-highlight-color:transparent}
+canvas{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
+.top{position:fixed;left:10px;right:10px;top:calc(env(safe-area-inset-top,0px) + 8px);pointer-events:none;display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+.ttl{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:7px 11px}
+.ttl b{font-size:17px;color:var(--gold)}
+.ttl span{display:block;font-size:11.5px;color:var(--mut);margin-top:1px}
+.hud{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:7px 10px;min-width:118px;font-size:11px;color:var(--mut)}
+.bar{height:7px;border-radius:4px;background:#12363d;margin-top:5px;overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#35e0d0,#f1c14f,#e0662e)}
+.dock{position:fixed;left:8px;right:8px;bottom:calc(env(safe-area-inset-bottom,0px) + 8px);display:flex;flex-direction:column;gap:7px;align-items:center}
+.info{display:none;width:100%;max-width:520px;background:var(--panel);border:1px solid var(--gold);border-radius:12px;padding:9px 12px;font-size:13px;line-height:1.35}
+.info b{color:var(--gold);display:block;margin-bottom:2px}
+.btns{display:flex;flex-wrap:wrap;gap:6px;justify-content:center}
+.fr{display:flex;align-items:center;gap:10px;background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:6px 14px;font-size:13px;width:100%;max-width:420px}
+.fr b{color:var(--gold)}.fr input{flex:1;min-width:0;accent-color:#f1c14f}
+button{font:inherit;font-size:13px;font-weight:600;color:var(--txt);background:var(--panel);border:1.5px solid var(--line);border-radius:999px;padding:8px 13px;cursor:pointer}
+button.on{background:linear-gradient(180deg,#1b6aa8,#0a3560);border-color:var(--gold)}
+button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.lb{position:fixed;left:0;top:0;font-size:11px;font-weight:600;color:#eafffb;background:rgba(8,40,48,.78);border:1px solid var(--acc);border-radius:8px;padding:2px 6px;white-space:nowrap;cursor:pointer;transform:translate(-9999px,-9999px);z-index:3}
+.lb:before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--gold);margin-right:5px}
+.lb.sel{border-color:var(--gold);background:rgba(90,60,0,.8)}
+.hide .lb{display:none}
+#err{position:fixed;inset:0;display:none;align-items:center;justify-content:center;text-align:center;padding:30px;font-size:15px}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="labels"></div>
+<div id="err">3D көрінісін бұл құрылғыда іске қосу мүмкін болмады (WebGL қажет).</div>
+
+<div class="top">
+  <div class="ttl"><b>AHSD макеті · 3D</b><span>Саусақпен айналдырыңыз, екі саусақпен жақындатыңыз</span></div>
+  <div class="hud">Ғимарат тербелісі (шартты)<div class="bar"><i id="bar"></i></div></div>
+</div>
+
+<div class="dock">
+  <div class="info" id="info"><b id="it"></b><span id="id"></span></div>
+  <div class="fr"><label for="am">Күші: <b id="av">7</b> балл</label><input id="am" type="range" min="3" max="9" step="1" value="7"></div>
+  <div class="fr"><label for="fq">Жиілік: <b id="fv">0,85</b> Гц</label><input id="fq" type="range" min="0.2" max="3" step="0.05" value="0.85"></div>
+  <div class="btns">
+    <button id="bq">Жер сілкінісі</button>
+    <button id="bt" class="on">Су резервуары: бар</button>
+    <button id="bl" class="on">Белгілер</button>
+    <button id="br">Айналдыру</button>
+    <button id="bh">Бастапқы көрініс</button>
+  </div>
+</div>
+
+<script>window.onerror=function(m,u,l){if(/^Script error/i.test(m||''))return;var e=document.getElementById('err');if(e){e.style.display='flex';e.textContent='Қате: '+m+' (жол '+l+')';}};</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" crossorigin="anonymous"></script>
+<script>
+(function(){
+const $=id=>document.getElementById(id);
+if(!window.THREE){$('err').style.display='flex';$('err').textContent='3D кітапханасы жүктелмеді. Интернетті тексеріп, бетті қайта ашыңыз.';return;}
+const T=THREE;
+let R;
+try{R=new T.WebGLRenderer({canvas:$('c'),antialias:true});}catch(e){$('err').style.display='flex';return;}
+R.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+const S=new T.Scene();S.background=new T.Color(0x0a1a1f);S.fog=new T.Fog(0x0a1a1f,40,95);
+const cam=new T.PerspectiveCamera(42,1,.1,120);
+const home={p:new T.Vector3(19,11,23),t:new T.Vector3(0,8.3,0)};
+const ctl={target:new T.Vector3(),autoRotate:false,th:.7,ph:1.2,r:30,vth:0,vph:0,drag:false,
+  update(){if(this.autoRotate&&!this.drag)this.th+=.004;this.th+=this.vth;this.ph=Math.max(.15,Math.min(1.52,this.ph+this.vph));this.vth*=.9;this.vph*=.9;
+    cam.position.set(this.target.x+this.r*Math.sin(this.ph)*Math.sin(this.th),this.target.y+this.r*Math.cos(this.ph),this.target.z+this.r*Math.sin(this.ph)*Math.cos(this.th));cam.lookAt(this.target);}};
+function goHome(){const d=home.p.clone().sub(home.t);ctl.target.copy(home.t);ctl.r=d.length();ctl.th=Math.atan2(d.x,d.z);ctl.ph=Math.acos(d.y/ctl.r);ctl.vth=ctl.vph=0;ctl.update();}
+(function(){const el=$('c'),ps=new Map();let pd=0;
+  el.addEventListener('pointerdown',e=>{el.setPointerCapture(e.pointerId);ps.set(e.pointerId,[e.clientX,e.clientY]);ctl.drag=true;if(ps.size===2){const a=[...ps.values()];pd=Math.hypot(a[0][0]-a[1][0],a[0][1]-a[1][1]);}});
+  el.addEventListener('pointermove',e=>{if(!ps.has(e.pointerId))return;const o=ps.get(e.pointerId);
+    if(ps.size===1){ctl.th-=(e.clientX-o[0])*.008;ctl.ph=Math.max(.15,Math.min(1.52,ctl.ph-(e.clientY-o[1])*.008));ps.set(e.pointerId,[e.clientX,e.clientY]);}
+    else{ps.set(e.pointerId,[e.clientX,e.clientY]);const a=[...ps.values()],d=Math.hypot(a[0][0]-a[1][0],a[0][1]-a[1][1]);if(pd>0)ctl.r=Math.max(6,Math.min(58,ctl.r*pd/d));pd=d;}});
+  const up=e=>{ps.delete(e.pointerId);if(ps.size===0)ctl.drag=false;pd=0;};
+  el.addEventListener('pointerup',up);el.addEventListener('pointercancel',up);
+  el.addEventListener('wheel',e=>{e.preventDefault();ctl.r=Math.max(6,Math.min(58,ctl.r*(1+e.deltaY*.001)));},{passive:false});})();
+S.add(new T.HemisphereLight(0xcfeeff,0x10303a,.95));
+const dl=new T.DirectionalLight(0xffffff,.85);dl.position.set(6,13,9);S.add(dl);
+const grid=new T.GridHelper(44,44,0x1f7f86,0x123a42);grid.position.y=-.32;S.add(grid);
+
+// ---- helpers
+const M=(c,o)=>new T.MeshStandardMaterial(Object.assign({color:c,roughness:.55,metalness:.25},o||{}));
+const EL=new T.LineBasicMaterial({color:0x5eead4,transparent:true,opacity:.5});
+function edges(m){m.add(new T.LineSegments(new T.EdgesGeometry(m.geometry),EL));}
+function box(p,w,h,d,x,y,z,mat,e){const m=new T.Mesh(new T.BoxGeometry(w,h,d),mat);m.position.set(x,y,z);p.add(m);if(e!==false)edges(m);return m;}
+function cyl(p,r,len,x,y,z,mat,ax){const m=new T.Mesh(new T.CylinderGeometry(r,r,len,28),mat);if(ax==='x')m.rotation.z=Math.PI/2;if(ax==='z')m.rotation.x=Math.PI/2;m.position.set(x,y,z);p.add(m);return m;}
+function spring(r,turns,tube){const pts=[];for(let i=0;i<=turns*24;i++){const t=i/(turns*24);pts.push(new T.Vector3(t,r*Math.cos(t*turns*6.2832),r*Math.sin(t*turns*6.2832)));}
+  const g=new T.Group();g.add(new T.Mesh(new T.TubeGeometry(new T.CatmullRomCurve3(pts),turns*24,tube,6),M(0xe8f1f2,{metalness:.7,roughness:.3})));return g;}
+
+// ---- ground + building
+const Hb=8.3,N=8,Y0=Hb+.3;
+const pzMat=M(0xd9a93b,{metalness:.5,emissive:0xf1c14f,emissiveIntensity:0});
+const gnd=new T.Group();S.add(gnd);
+box(gnd,15,.3,6.6,0,-.15,0,M(0x2a4a52,{transparent:true,opacity:.3,depthWrite:false}));
+const found=box(gnd,8.6,1,4.4,0,-.8,0,M(0x3b5560));
+[-3.4,-1.1,1.1,3.4].forEach(x=>[-1.6,1.6].forEach(z=>box(gnd,.35,1.5,.35,x,-2,z,M(0x2d4850),false)));
+box(gnd,8.2,.3,3.9,0,.15,0,M(0x4a6f7a));
+const sensMat=M(0x14323a),leds=[];
+[[0,2.4],[-5.2,-2]].forEach(p=>{box(gnd,.55,.3,.55,p[0],.15,p[1],sensMat);
+  const l=new T.Mesh(new T.SphereGeometry(.09,12,12),M(0x35e08a,{emissive:0x35e08a,emissiveIntensity:.4}));l.position.set(p[0],.38,p[1]);gnd.add(l);leds.push(l);});
+const sensorObj=new T.Object3D();sensorObj.position.set(0,.4,2.4);gnd.add(sensorObj);
+// floors with windows
+const floors=[],fMat=M(0x46788a),wOn=M(0xffe49a,{emissive:0xffd36b,emissiveIntensity:.7,roughness:.4}),wOff=M(0x1f4a66,{emissive:0x0a2030,emissiveIntensity:.3});
+const wp=new T.PlaneGeometry(.7,.5),ws=new T.PlaneGeometry(.6,.5);
+for(let i=0;i<N;i++){const f=new T.Group();f.position.y=.3+i+.5;S.add(f);
+  box(f,7.6,.94,3.6,0,0,0,fMat);
+  for(let k=0;k<6;k++)[1,-1].forEach(sg=>{const w=new T.Mesh(wp,Math.random()<.6?wOn:wOff);w.position.set(-3+k*1.2,0,sg*1.81);if(sg<0)w.rotation.y=Math.PI;f.add(w);});
+  for(let k=0;k<3;k++)[1,-1].forEach(sg=>{const w=new T.Mesh(ws,Math.random()<.6?wOn:wOff);w.position.set(sg*3.81,0,-1+k);w.rotation.y=sg*Math.PI/2;f.add(w);});
+  floors.push(f);}
+// AHSD system group on the roof
+const A=new T.Group();A.position.y=Y0;S.add(A);
+const deck=new T.Group();A.add(deck);
+box(deck,7.9,.3,3.7,0,-.15,0,M(0x2a4a52));
+[[-3.2,-1.3],[-3.2,1.3],[3.2,-1.3],[3.2,1.3]].forEach(p=>box(deck,.95,.5,.95,p[0],.25,p[1],M(0x3b6670)));
+
+// reference line (static)
+const ref=new T.Line(new T.BufferGeometry().setFromPoints([new T.Vector3(0,-.3,-3.4),new T.Vector3(0,18,-3.4)]),new T.LineDashedMaterial({color:0xf1c14f,dashSize:.2,gapSize:.15}));
+ref.computeLineDistances();S.add(ref);
+
+// ---- columns (sheared)
+let pzObj;const cols=[];const colMat=M(0x55808a);
+[[-3.2,-1.3],[-3.2,1.3],[3.2,-1.3],[3.2,1.3]].forEach(p=>{
+  const g=new T.BoxGeometry(.5,4.5,.5);g.translate(0,2.25,0);
+  const m=new T.Mesh(g,colMat);edges(m);m.matrixAutoUpdate=false;A.add(m);cols.push({m,x:p[0],z:p[1]});
+  [1.3,3.3].forEach(y=>{const pm=new T.Mesh(new T.BoxGeometry(.07,1.5,.34),pzMat);pm.position.set(p[0]<0?.29:-.29,y,0);m.add(pm);if(!pzObj)pzObj=pm;});});
+
+// ---- top (slab + everything on it)
+const top=new T.Group();A.add(top);
+box(top,7.8,.3,3.4,0,5.15,0,M(0x4a7580));
+[-.75,.75].forEach(z=>box(top,7.4,.12,.14,0,5.36,z,M(0xf1c14f,{metalness:.5})));
+const rails=new T.Object3D();rails.position.set(-2.9,5.45,.75);top.add(rails);
+// tank
+const tank=new T.Group();top.add(tank);
+const tb=box(tank,3.5,1.55,2.1,0,6.7,0,M(0x6d98a3,{transparent:true,opacity:.35,depthWrite:false}));
+const water=new T.Mesh(new T.BoxGeometry(3.3,1.1,1.9),M(0x5d7d8f,{transparent:true,opacity:.92,roughness:.25,metalness:.5}));water.position.set(0,6.55,0);tank.add(water);
+const wTop=new T.Mesh(new T.PlaneGeometry(3.3,1.9),M(0xa9c2cf,{transparent:true,opacity:.9,roughness:.1}));wTop.rotation.x=-Math.PI/2;wTop.position.y=1.11/2;water.add(wTop);
+[-1.1,1.1].forEach(x=>[-.75,.75].forEach(z=>cyl(tank,.26,.18,x,5.68,z,M(0x234a55),'z')));
+const loopC=new T.CatmullRomCurve3([[1.4,7.5,.9],[1.4,8.1,.9],[0,8.45,.9],[-1.4,8.1,.9],[-1.4,7.5,.9]].map(p=>new T.Vector3(p[0],p[1],p[2])));
+const loop=new T.Mesh(new T.TubeGeometry(loopC,30,.05,8),M(0x35e0d0,{emissive:0x35e0d0,emissiveIntensity:.35}));tank.add(loop);
+const flow=new T.Mesh(new T.SphereGeometry(.1,10,10),M(0xffffff,{emissive:0xffffff,emissiveIntensity:1}));tank.add(flow);
+// controller & supercap
+const mcu=box(top,.75,.1,.75,3.15,5.4,-.5,M(0x1d7a4a));
+box(top,.35,.12,.35,3.15,5.5,-.5,M(0x111111));
+const cap=cyl(top,.24,.6,3.15,5.7,.55,M(0x1b6aa8,{emissive:0xf1c14f,emissiveIntensity:0}));
+cyl(top,.26,.06,3.15,6.02,.55,M(0xf1c14f));
+// damper box (under slab)
+const dbox=box(top,5,1.6,1.7,0,3.0,0,M(0x6fbfb8,{transparent:true,opacity:.07,depthWrite:false}));
+const cylM=cyl(top,.44,1.9,-1.45,3.0,0,M(0x7fd0ff,{transparent:true,opacity:.38,depthWrite:false}),'x');
+for(let i=0;i<26;i++){const t=new T.Mesh(new T.TorusGeometry(.07,.018,6,10),M(0xffd36b,{emissive:0x8a6a10,emissiveIntensity:.4}));
+  t.position.set(-2.2+Math.random()*1.6,3+(Math.random()-.5)*.55,(Math.random()-.5)*.55);t.rotation.set(Math.random()*3,Math.random()*3,0);top.add(t);}
+[-.75,-.65,-.55,-.45].forEach(x=>{const r=new T.Mesh(new T.TorusGeometry(.46,.03,8,24),M(0xcfe9ef));r.rotation.y=Math.PI/2;r.position.set(x,3,0);top.add(r);});
+const rodG=new T.Group();top.add(rodG);
+cyl(rodG,.1,2.1,-.6,3,0,M(0xe8f1f2,{metalness:.8}),'x');
+cyl(rodG,.3,.14,-1.55,3,0,M(0xe8f1f2,{metalness:.8}),'x');
+const mag=box(top,.9,1.1,1.1,.35,3,0,M(0xc0261f,{emissive:0xc0261f,emissiveIntensity:.3}));
+const servo=box(top,1.3,.8,.8,1.6,3,0,M(0x5d7f88));
+cyl(top,.12,.5,2.4,3,0,M(0x9db6bb),'x');
+const cab=new T.Line(new T.BufferGeometry().setFromPoints([new T.Vector3(2.3,3,.4),new T.Vector3(3.15,3,.4),new T.Vector3(3.15,5.3,.4)]),new T.LineBasicMaterial({color:0x4aa8ff}));top.add(cab);
+
+// ---- piezo blocks + springs (root, updated per frame)
+const bMat=M(0xd9a93b,{metalness:.5});
+const bL=box(A,.36,.3,.5,0,0,-1.3,bMat),bR=box(A,.36,.3,.5,0,0,1.3,bMat);
+const spL=spring(.2,6,.028),spR=spring(.2,7,.03);A.add(spL,spR);
+const mrRod=cyl(spR,.07,.5,.5,0,0,M(0x35e0d0,{emissive:0x35e0d0,emissiveIntensity:.4}),'x');
+function setSpring(g,A,B,z){g.position.set(A.x,A.y,z);g.rotation.z=Math.atan2(B.y-A.y,B.x-A.x);g.scale.x=A.distanceTo(B);}
+
+// ---- labels
+const L=[
+ ['МР-сұйықтық (120 т)','Инерциялық масса. Ғимарат бір жаққа тербелсе, масса кері қарай жылжып, тербелісті бәсеңдетеді.',tb],
+ ['Қайта айналу тізбегі','Біркелкі МР-сұйықтықтың үздіксіз қозғалысын қамтамасыз етеді.',loop],
+ ['Т-тәрізді рельстер','Резервуардың тек белгілі бір бағытта қозғалуын қамтамасыз етіп, тұрақтылығын сақтайды.',rails],
+ ['Серіппелер','Ғимарат пен пьезокерамикалық блоктың арасындағы серіппелі байланыс.',spL],
+ ['Пьезокерамикалық блоктар','Діріл энергиясын электр энергиясына түрлендіреді.',bR],
+ ['Пьезоэлектрлік панельдер (PZT/полимер)','Колоннадағы панельдер деформациядан электр энергиясын жинайды.',pzObj],
+ ['МР-поршень','Магнитті-реологиялық (MR) демпфер тербелісті реттейді.',spR],
+ ['Микроконтроллер','Датчиктердің сигналын өңдеп, демпферді басқарады.',mcu],
+ ['Суперконденсаторлық жинақтауыш','Пьезо-қуат модулі: жиналған энергияны сақтайды.',cap],
+ ['Сейсмодатчиктер','Жер сілкінісін сезіп, сигнал береді.',sensorObj],
+ ['Басқару камерасы','Біркелкі МР-сұйықтық пен активті ферромагнитті бөлшектер: магнит өрісі тежеуді өзгертеді.',cylM],
+ ['Неодим магнит матрицасы','Магнит өрісін басқарады (Ni-Cu-Ni қабаты).',mag],
+ ['Сервопривод','Демпфер поршенін басқаратын жетек.',servo],
+ ['Көпқабатты ғимарат','Қорғалатын ғимарат: AHSD жүйесі оның төбесінде орналасқан.',floors[4]],
+ ['Іргетас','Ғимараттың іргетасы мен қадалары.',found]
+];
+const lbEl=[];let sel=-1;
+L.forEach((l,i)=>{const e=document.createElement('div');e.className='lb';e.textContent=l[0];
+  e.onclick=()=>{sel=sel===i?-1:i;lbEl.forEach((x,j)=>x.classList.toggle('sel',j===sel));
+    $('info').style.display=sel<0?'none':'block';if(sel>=0){$('it').textContent=l[0];$('id').textContent=l[1];}};
+  $('labels').appendChild(e);lbEl.push(e);});
+const v=new T.Vector3();
+
+// ---- state & loop
+let shake=false,tankOn=true,env=0,t=0,freq=.85,amp=.93,last=performance.now();
+const bar=$('bar');
+function resize(){const w=innerWidth,h=innerHeight;R.setSize(w,h,false);cam.aspect=w/h;cam.fov=w/h<.8?62:42;cam.updateProjectionMatrix();}
+addEventListener('resize',resize);resize();goHome();
+
+function frame0(now){
+  const dt=Math.max(0,Math.min((now-last)/1000,.05));last=now;
+  env+=((shake?1:0)-env)*Math.min(1,dt*2.4);if(env<.001&&!shake)env=0;t+=dt*freq/.85;
+  const w=6.2832*.85,G=.2*amp*env*Math.sin(w*t),dr=(tankOn?.3:.8)*amp*env*Math.sin(w*t-1.1),g=G+dr,rel=(tankOn?.14:.05)*amp*env*Math.sin(w*t-2.2),Tp=g+rel;
+  const tr=tankOn?Math.max(-1.1,Math.min(1.1,-5.5*rel)):0;
+  gnd.position.x=G;floors.forEach((f,i)=>f.position.x=G+dr*Math.pow((i+1)/N,1.5));deck.position.x=g;top.position.x=Tp;tank.position.x=tr;tank.visible=tankOn;
+  water.rotation.z=tr*.1;
+  const sh=new T.Matrix4();
+  cols.forEach(c=>{sh.set(1,rel/4.5,0,0,0,1,0,0,0,0,1,0,0,0,0,1);c.m.matrix.makeTranslation(c.x+g,.5,c.z).multiply(sh);c.m.matrixWorldNeedsUpdate=true;});
+  const k=(3.9-.5)/4.5;
+  bL.position.set(-2.77+g+rel*k,3.9,-1.3);bR.position.set(2.77+g+rel*k,3.9,1.3);
+  setSpring(spL,bL.position,new T.Vector3(Tp-1.2,5,0),-1.3);
+  setSpring(spR,bR.position,new T.Vector3(Tp+1.1,5,0),1.3);
+  rodG.position.x=Math.max(-.45,Math.min(.45,tankOn?tr*.3:rel*.8));
+  mag.material.emissiveIntensity=.3+.8*env*Math.abs(Math.sin(w*t*2));
+  cap.material.emissiveIntensity=.65*env*(.6+.4*Math.sin(w*t*3));
+  leds.forEach(l=>l.material.emissiveIntensity=.4+1.6*env*Math.abs(Math.sin(w*t*2)));
+  pzMat.emissiveIntensity=.9*env*Math.abs(Math.sin(w*t*2));flow.position.copy(loopC.getPoint(Math.min(.999,Math.max(0,(t*.35)%1))));flow.visible=env>.03&&tankOn;loop.visible=tankOn;
+  bar.style.width=Math.min(100,Math.abs(dr)/1.6*100)+'%';
+  ctl.update();R.render(S,cam);
+  const W=innerWidth,H=innerHeight;
+  L.forEach((l,i)=>{const o=l[2];o.getWorldPosition(v);if(o===spL||o===spR){v.y+=.5;}
+    v.project(cam);const el=lbEl[i];
+    if(v.z>1||((o===tb||o===loop)&&!tankOn)){el.style.transform='translate(-9999px,-9999px)';return;}
+    el.style.transform='translate('+((v.x*.5+.5)*W+4).toFixed(0)+'px,'+((-v.y*.5+.5)*H-10).toFixed(0)+'px)';});
+  requestAnimationFrame(frame);
+}
+function showErr(e){const x=$('err');x.style.display='flex';x.style.whiteSpace='pre-wrap';x.style.pointerEvents='none';x.textContent='Қате: '+e.message+'\n'+String(e.stack||'').split('\n').slice(0,3).join('\n');}
+function frame(now){try{frame0(now);}catch(e){showErr(e);}}
+requestAnimationFrame(frame);
+
+// ---- buttons
+function tog(id,fn){const b=$(id);b.onclick=()=>fn(b);}
+tog('bq',b=>{shake=!shake;b.classList.toggle('on',shake);b.textContent=shake?'Тоқтату':'Жер сілкінісі';});
+tog('bt',b=>{tankOn=!tankOn;b.classList.toggle('on',tankOn);b.textContent='Су резервуары: '+(tankOn?'бар':'жоқ');});
+tog('bl',b=>{const on=!document.body.classList.contains('hide');document.body.classList.toggle('hide',on);b.classList.toggle('on',!on);});
+tog('br',b=>{ctl.autoRotate=!ctl.autoRotate;b.classList.toggle('on',ctl.autoRotate);});
+tog('bh',()=>goHome());
+$('am').oninput=e=>{const p=+e.target.value;amp=.2*Math.pow(10,(p-3)/6);$('av').textContent=p;};
+$('fq').oninput=e=>{freq=+e.target.value;$('fv').textContent=freq.toFixed(2).replace('.',',');};
+$('br').classList.remove('on');
+})();
+</script>
+</body>
+</html>
